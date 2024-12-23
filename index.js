@@ -1,6 +1,6 @@
 import express from "express";
 import http from "http";
-import { Server } from "socket.io"; // Correct import for ES Modules
+import { Server } from "socket.io"; 
 import dotenv from "dotenv";
 import { Connection } from "./Databse/db.js";
 import cors from "cors";
@@ -20,11 +20,15 @@ const io = new Server(server); // Initialize Socket.IO with the server
 
 const Port = process.env.PORT || 3000;
 
+// In-memory object to store user socket mapping
+let users = {};
+
 // Middleware
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json({ extended: true }));
 
+// Route handlers
 app.use("/", Routes);
 app.use("/api/user/", EmployeeRoutes);
 app.use("/api/userLogin/", LoginRoutes);
@@ -32,8 +36,20 @@ app.use("/api/leavetype/", LeavetypeRoutes);
 app.use("/api/todos", todoRoutes);
 app.use('/api/messages', messageRoutes);
 
+// Socket.io handling
 io.on("connection", (socket) => {
-  console.log("New client connected");
+  console.log(`New client connected: ${socket.id}`);
+
+  // Register user with their socket ID
+  socket.on("register_user", (userId) => {
+    // Only register user if not already registered
+    if (!users[userId]) {
+      console.log(`User ${userId} registered with socket ID ${socket.id}`);
+      users[userId] = socket.id;
+    } else {
+      console.log(`User ${userId} is already registered with socket ID ${users[userId]}`);
+    }
+  });
 
   // Message sending and saving
   socket.on("send_message", async (data) => {
@@ -68,36 +84,56 @@ io.on("connection", (socket) => {
 
   // Handle call initiation
   socket.on("call_user", (data) => {
-    io.to(data.receiverId).emit("call_user", {
-      callerId: data.callerId,
-      callerName: data.callerName,
-      offer: data.offer,
-      callType: data.callType, // audio or video
-    });
+    console.log("Calling user:", data);
+    if (users[data.receiverId]) {
+      io.to(users[data.receiverId]).emit("call_user", {
+        callerId: data.callerId,
+        callerName: data.callerName,
+        offer: data.offer,
+        callType: data.callType, // audio or video
+      });
+    }
   });
 
   // Handle accepting the call
   socket.on("accept_call", (data) => {
-    io.to(data.callerId).emit("accept_call", {
-      receiverId: data.receiverId,
-      answer: data.answer,
-    });
+    console.log("Accepting call:", data);
+    if (users[data.callerId]) {
+      io.to(users[data.callerId]).emit("accept_call", {
+        receiverId: data.receiverId,
+        answer: data.answer,
+      });
+    }
   });
 
   // Handle ICE candidate exchange for WebRTC
   socket.on("ice_candidate", (data) => {
-    io.to(data.receiverId).emit("ice_candidate", data.candidate);
+    if (users[data.receiverId]) {
+      io.to(users[data.receiverId]).emit("ice_candidate", data.candidate);
+    }
   });
 
   // Handle disconnecting or ending the call
   socket.on("end_call", (data) => {
-    io.to(data.receiverId).emit("end_call", { message: "The call has ended" });
-    io.to(data.callerId).emit("end_call", { message: "The call has ended" });
+    if (users[data.receiverId]) {
+      io.to(users[data.receiverId]).emit("end_call", { message: "The call has ended" });
+    }
+    if (users[data.callerId]) {
+      io.to(users[data.callerId]).emit("end_call", { message: "The call has ended" });
+    }
   });
 
   // Handle disconnection
   socket.on("disconnect", () => {
-    console.log("Client disconnected");
+    console.log(`Client disconnected: ${socket.id}`);
+    // Remove user from active users list when they disconnect
+    for (let userId in users) {
+      if (users[userId] === socket.id) {
+        console.log(`User ${userId} disconnected`);
+        delete users[userId]; // Remove user from active users list
+        break;
+      }
+    }
   });
 });
 
