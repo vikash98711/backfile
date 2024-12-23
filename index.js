@@ -28,7 +28,6 @@ app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json({ extended: true }));
 
-// Route handlers
 app.use("/", Routes);
 app.use("/api/user/", EmployeeRoutes);
 app.use("/api/userLogin/", LoginRoutes);
@@ -36,7 +35,6 @@ app.use("/api/leavetype/", LeavetypeRoutes);
 app.use("/api/todos", todoRoutes);
 app.use('/api/messages', messageRoutes);
 
-// Socket.io handling
 io.on("connection", (socket) => {
   console.log(`New client connected: ${socket.id}`);
 
